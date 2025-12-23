@@ -1,0 +1,232 @@
+{
+  "name": "LLM Prompt Comparison Pipeline",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "ManualTrigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [200, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "prompt_id",
+              "value": "prompt_v1"
+            },
+            {
+              "name": "prompt",
+              "value": "Explain Docker networking in simple terms."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "SetPrompt1",
+      "name": "Set Prompt 1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [400, 200]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "prompt_id",
+              "value": "prompt_v2"
+            },
+            {
+              "name": "prompt",
+              "value": "Explain Docker networking for a backend developer."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "SetPrompt2",
+      "name": "Set Prompt 2",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "mode": "append"
+      },
+      "id": "MergePrompts",
+      "name": "Merge Prompts",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 2,
+      "position": [600, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1
+      },
+      "id": "SplitInBatches",
+      "name": "Split In Batches",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 1,
+      "position": [800, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "jsonParameters": true,
+        "options": {
+          "timeout": 200000
+        },
+        "bodyParametersJson": "{\n  \"model\": \"gpt-4o-mini\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"={{ $json.prompt }}\"\n    }\n  ],\n  \"temperature\": 0.7\n}",
+        "headerParametersJson": "{\n  \"Authorization\": \"Bearer {{ $env.OPENAI_API_KEY }}\",\n  \"Content-Type\": \"application/json\"\n}"
+      },
+      "id": "OpenAIRequest",
+      "name": "HTTP Request (OpenAI)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [1000, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "prompt_id",
+              "value": "={{ $json.prompt_id }}"
+            },
+            {
+              "name": "prompt",
+              "value": "={{ $json.prompt }}"
+            },
+            {
+              "name": "output",
+              "value": "={{ $json.choices[0].message.content }}"
+            },
+            {
+              "name": "model",
+              "value": "gpt-4o-mini"
+            },
+            {
+              "name": "timestamp",
+              "value": "={{ $now }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "NormalizeOutput",
+      "name": "Set (Normalize Output)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [1200, 300]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "table": "llm_logs",
+        "columns": "timestamp, model, prompt_id, prompt, output",
+        "values": "={{ [$json.timestamp, $json.model, $json.prompt_id, $json.prompt, $json.output] }}"
+      },
+      "id": "PostgresInsert",
+      "name": "Postgres (Log Output)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [1400, 300],
+      "credentials": {
+        "postgres": {
+          "id": "YOUR_POSTGRES_CREDENTIAL_ID",
+          "name": "Postgres Credentials"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Prompt 1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Set Prompt 2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Prompt 1": {
+      "main": [
+        [
+          {
+            "node": "Merge Prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Prompt 2": {
+      "main": [
+        [
+          {
+            "node": "Merge Prompts",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Prompts": {
+      "main": [
+        [
+          {
+            "node": "Split In Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split In Batches": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request (OpenAI)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request (OpenAI)": {
+      "main": [
+        [
+          {
+            "node": "Set (Normalize Output)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set (Normalize Output)": {
+      "main": [
+        [
+          {
+            "node": "Postgres (Log Output)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
