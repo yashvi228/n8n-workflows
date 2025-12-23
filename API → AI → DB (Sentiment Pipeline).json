@@ -1,0 +1,215 @@
+{
+  "name": "API → AI → DB (Sentiment Pipeline)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "70df59cb-8b51-43f2-9cc5-3288a8790104",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "options": {}
+      },
+      "id": "d242654a-5aca-42f4-b336-4217220ac7e9",
+      "name": "Fetch Posts API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        208,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "post_id",
+              "value": "={{$json[\"id\"]}}"
+            },
+            {
+              "name": "content",
+              "value": "={{$json[\"title\"] + \" \" + $json[\"body\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "72556610-1027-4a74-beea-4a71f87692c8",
+      "name": "Prepare Text",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": "post_sentiments",
+        "options": {}
+      },
+      "id": "bbce5a52-cff2-4934-b5a1-2c356739b095",
+      "name": "Store in DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2,
+      "position": [
+        1008,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "DBg0cBCnUPsaYuFm",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "gpt-4o-mini",
+          "mode": "list",
+          "cachedResultName": "GPT-4O-MINI"
+        },
+        "responses": {
+          "values": [
+            {
+              "content": "=Analyze the sentiment of the following text and return ONLY one word: Positive, Negative, or Neutral. Text: {{ $json.content }}"
+            }
+          ]
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 2.1,
+      "position": [
+        544,
+        0
+      ],
+      "id": "69e2b70d-9047-48d6-9bdd-b7a07457bd85",
+      "name": "Message a model",
+      "retryOnFail": true,
+      "maxTries": 5,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "openAiApi": {
+          "id": "8B300A3mpKAlLXDl",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "d6fc86f3-427e-403a-9674-8f57d94fa828",
+              "name": "post_id",
+              "value": "={{ $('Prepare Text').item.json.post_id }}",
+              "type": "string"
+            },
+            {
+              "id": "19e2f278-f063-4546-bd96-5d443bc24755",
+              "name": "sentiment",
+              "value": "={{ $json.content }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        768,
+        0
+      ],
+      "id": "5c37f762-c4bc-486c-b9ca-41cbbb1ec386",
+      "name": "Edit Fields"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Fetch Posts API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Posts API": {
+      "main": [
+        [
+          {
+            "node": "Prepare Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Text": {
+      "main": [
+        [
+          {
+            "node": "Message a model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Store in DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "5885c341-e5b1-4df8-a7e4-115f09f9da62",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a56b0b046bcde86d4a16d94e8de22d63b8929c26acd302982627f09f95c61a11"
+  },
+  "id": "FgPKM6avleG6NSpK",
+  "tags": []
+}
